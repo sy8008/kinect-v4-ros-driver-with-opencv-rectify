@@ -11,8 +11,10 @@ Licensed under the MIT License.
   <arg name="rgb_rect" default="1" />
   <arg name="depth_rect" default="1" />
   <arg name="ir_rect" default="1" />
+  <arg name="depth_to_rgb_rect" default="1" />
   <arg name="point_cloud" default="1" />
   <arg name="rgb_point_cloud" default="1" />
+
 
   <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
   <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />
@@ -53,6 +55,15 @@ Licensed under the MIT License.
       <remap from="image_mono"  to="ir/image_raw" />
       <remap from="image_rect"  to="ir/image_rect" />
     </node>
+    
+    <!-- Spawn an image_proc/rectify nodelet to rectify the depth image which have already aligned with the rgb image -->
+    <node if="$(arg depth_to_rgb_rect)"
+          pkg="nodelet" type="nodelet" name="rectify_depth_to_rgb"
+          args="load image_proc/rectify manager --no-bond"
+          respawn="true">
+      <remap from="image_mono"  to="depth_to_rgb/image_raw" />
+      <remap from="image_rect"  to="depth_to_rgb/image_rect" />
+    </node>
 
     <group if="$(arg point_cloud)">
       <!-- Spawn a depth_image_proc/point_cloud_xyz nodelet to convert the 
@@ -87,8 +98,8 @@ Licensed under the MIT License.
       <param name="depth_enabled"     value="true" />
       <param name="depth_mode"        value="NFOV_UNBINNED" />
       <param name="color_enabled"     value="true" />
-      <param name="color_resolution"  value="1536P" />
-      <param name="fps"               value="5" />
+      <param name="color_resolution"  value="720P" />
+      <param name="fps"               value="15" />
       <param name="point_cloud"       value="true" />
       <param name="rgb_point_cloud"   value="true" />
       <param name="required"          value="true" />

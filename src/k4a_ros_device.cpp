@@ -1080,6 +1080,13 @@ void K4AROSDevice::framePublisherThread()
         {
           result = getRbgFrame(capture, rgb_raw_frame);
 
+          cv_bridge::CvImagePtr cv_ptr_raw_rgb;
+          cv_ptr_raw_rgb = cv_bridge::toCvCopy(rgb_raw_frame, sensor_msgs::image_encodings::BGRA8);
+          
+
+
+
+
           if (result != K4A_RESULT_SUCCEEDED)
           {
             ROS_ERROR_STREAM("Failed to get RGB frame");
