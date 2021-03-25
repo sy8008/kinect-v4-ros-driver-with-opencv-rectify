@@ -47,6 +47,56 @@ K4AROSDevice::K4AROSDevice(const NodeHandle& n, const NodeHandle& p)
     last_imu_time_usec_(0),
     imu_stream_end_of_file_(false)
 {
+   // caculating rectify map in OpenCV
+  CameraInfo camera_info_rgb,camera_info_depth;
+  calibration_data_.getDepthCameraInfo(camera_info_depth);
+  calibration_data_.getRgbCameraInfo(camera_info_rgb);
+  
+
+  // get  rectification map for rgb image
+  cv::Mat R = cv::Mat::eye(cv::Size(3,3),CV_32FC1);  // 对角线为1的对角矩阵
+  cv::Mat dist_coff_rgb=(cv::Mat_<double>(1,8)<<camera_info_rgb.D[0],camera_info_rgb.D[1],camera_info_rgb.D[2],camera_info_rgb.D[3],\
+                                                camera_info_rgb.D[4],camera_info_rgb.D[5],camera_info_rgb.D[6],camera_info_rgb.D[7]);
+  
+  cv::Mat cam_matrix_rgb=(cv::Mat_<double>(3,3)<<camera_info_rgb.K[0],camera_info_rgb.K[1],camera_info_rgb.K[2],\
+                                            camera_info_rgb.K[3],camera_info_rgb.K[4],camera_info_rgb.K[5],\
+                                            camera_info_rgb.K[6],camera_info_rgb.K[7],camera_info_rgb.K[8]);
+
+  new_cam_matrix_rgb=cv::getOptimalNewCameraMatrix(cam_matrix_rgb,dist_coff_rgb,cv::Size(camera_info_rgb.width,camera_info_rgb.height),1,cv::Size(camera_info_rgb.width,camera_info_rgb.height));
+  cv::initUndistortRectifyMap(new_cam_matrix_rgb,dist_coff_rgb,R,cam_matrix_rgb,cv::Size(camera_info_rgb.width,camera_info_rgb.height),CV_32FC1,map1_rgb,map2_rgb);
+  
+  for(int i=0;i<3;i++)
+    for(int j=0;j<3;j++){
+      rgb_rect_camerainfo_cv.K[3*i+j]=new_cam_matrix_rgb.ptr<double>(i)[j];
+    } 
+  
+  for(int i=0;i<8;i++){
+      rgb_rect_camerainfo_cv.D[i]=0.0;
+  }
+
+
+   // get  rectification map for depth image
+  // cv::Mat R = cv::Mat::eye(cv::Size(3,3),CV_32FC1);  // 对角线为1的对角矩阵
+  cv::Mat dist_coff_depth=(cv::Mat_<double>(1,8)<<camera_info_depth.D[0],camera_info_depth.D[1],camera_info_depth.D[2],camera_info_depth.D[3],\
+                                                camera_info_depth.D[4],camera_info_depth.D[5],camera_info_depth.D[6],camera_info_depth.D[7]);
+  
+  cv::Mat cam_matrix_depth=(cv::Mat_<double>(3,3)<<camera_info_depth.K[0],camera_info_depth.K[1],camera_info_depth.K[2],\
+                                            camera_info_depth.K[3],camera_info_depth.K[4],camera_info_depth.K[5],\
+                                            camera_info_depth.K[6],camera_info_depth.K[7],camera_info_depth.K[8]);
+
+  new_cam_matrix_depth=cv::getOptimalNewCameraMatrix(cam_matrix_depth,dist_coff_depth,cv::Size(camera_info_depth.width,camera_info_depth.height),1,cv::Size(camera_info_depth.width,camera_info_depth.height));
+  cv::initUndistortRectifyMap(new_cam_matrix_depth,dist_coff_depth,R,cam_matrix_depth,cv::Size(camera_info_depth.width,camera_info_depth.height),CV_32FC1,map1_depth,map2_depth);
+  
+  for(int i=0;i<3;i++)
+    for(int j=0;j<3;j++){
+      depth_rect_camerainfo_cv.K[3*i+j]=new_cam_matrix_depth.ptr<double>(i)[j];
+    } 
+  
+  for(int i=0;i<8;i++){
+      depth_rect_camerainfo_cv.D[i]=0.0;
+  }
+
+
   // Collect ROS parameters from the param server or from the command line
 #define LIST_ENTRY(param_variable, param_help_string, param_type, param_default_val) \
   private_node_.param(#param_variable, params_.param_variable, param_default_val);
@@ -217,11 +267,16 @@ K4AROSDevice::K4AROSDevice(const NodeHandle& n, const NodeHandle& p)
   else if (params_.color_format == "bgra")
   {
     rgb_raw_publisher_ = image_transport_.advertise("rgb/image_raw", 1);
+    rgb_rect_publisher_cv=image_transport_.advertise("rgb/image_rect_cv", 1);
   }
   rgb_raw_camerainfo_publisher_ = node_.advertise<CameraInfo>("rgb/camera_info", 1);
+  rgb_rect_camerainfo_publisher_cv=node_.advertise<CameraInfo>("rgb/camera_info_rect_cv", 1);
 
   depth_raw_publisher_ = image_transport_.advertise("depth/image_raw", 1);
+  depth_rect_publisher_cv=image_transport_.advertise("depth/image_rect_cv", 1);
+
   depth_raw_camerainfo_publisher_ = node_.advertise<CameraInfo>("depth/camera_info", 1);
+  depth_rect_camerainfo_publisher_cv=node_.advertise<CameraInfo>("depth/camera_info_rect_cv", 1);
 
   depth_rect_publisher_ = image_transport_.advertise("depth_to_rgb/image_raw", 1);
   depth_rect_camerainfo_publisher_ = node_.advertise<CameraInfo>("depth_to_rgb/camera_info", 1);
@@ -870,9 +925,14 @@ void K4AROSDevice::framePublisherThread()
 
     CompressedImagePtr rgb_jpeg_frame(new CompressedImage);
     ImagePtr rgb_raw_frame(new Image);
+    ImagePtr rgb_rect_frame_cv(new Image);
+
     ImagePtr rgb_rect_frame(new Image);
     ImagePtr depth_raw_frame(new Image);
     ImagePtr depth_rect_frame(new Image);
+    ImagePtr depth_rect_frame_cv(new Image);
+
+
     ImagePtr ir_raw_frame(new Image);
     PointCloud2Ptr point_cloud(new PointCloud2);
 
@@ -918,6 +978,15 @@ void K4AROSDevice::framePublisherThread()
             (k4a_device_ || capture.get_depth_image() != nullptr))
         {
           result = getDepthFrame(capture, depth_raw_frame);
+          cv_bridge::CvImagePtr cv_ptr_raw_depth;
+          cv_ptr_raw_depth = cv_bridge::toCvCopy(depth_raw_frame, sensor_msgs::image_encodings::TYPE_32FC1);
+
+          cv::Mat distort_img_depth=cv_ptr_raw_depth->image.clone();
+          cv::Mat undistort_img_depth;
+          cv::remap(distort_img_depth,undistort_img_depth,map1_depth,map2_depth,cv::INTER_LINEAR);
+
+
+
 
           if (result != K4A_RESULT_SUCCEEDED)
           {
@@ -932,11 +1001,27 @@ void K4AROSDevice::framePublisherThread()
 
             // Re-sychronize the timestamps with the capture timestamp
             depth_raw_camera_info.header.stamp = capture_time;
+            depth_rect_camerainfo_cv.header.stamp=capture_time;
+
             depth_raw_frame->header.stamp = capture_time;
             depth_raw_frame->header.frame_id = calibration_data_.tf_prefix_ + calibration_data_.depth_camera_frame_;
 
+            depth_rect_frame_cv=cv_ptr_raw_depth.toImageMsg()
+            depth_rect_frame_cv->header.stamp=depth_raw_frame->header.stamp;
+            depth_rect_frame_cv->header.frame_id=depth_raw_frame->header.frame_id;
+
+
+            // Re-synchronize the header timestamps since we cache the camera calibration message
+
             depth_raw_publisher_.publish(depth_raw_frame);
+            depth_rect_publisher_cv.publish(depth_rect_frame_cv);
+
+
             depth_raw_camerainfo_publisher_.publish(depth_raw_camera_info);
+            depth_rect_camerainfo_publisher_cv.publish(depth_rect_camerainfo_cv);
+            
+
+
           }
         }
 
@@ -1082,6 +1167,9 @@ void K4AROSDevice::framePublisherThread()
 
           cv_bridge::CvImagePtr cv_ptr_raw_rgb;
           cv_ptr_raw_rgb = cv_bridge::toCvCopy(rgb_raw_frame, sensor_msgs::image_encodings::BGRA8);
+          cv::Mat distort_img_rgb=cv_ptr_raw_rgb->image.clone();
+          cv::Mat undistort_img_rgb;
+          cv::remap(distort_img_rgb,undistort_img_rgb,map1_rgb,map2_rgb,cv::INTER_LINEAR);
           
 
 
@@ -1099,11 +1187,24 @@ void K4AROSDevice::framePublisherThread()
 
           rgb_raw_frame->header.stamp = capture_time;
           rgb_raw_frame->header.frame_id = calibration_data_.tf_prefix_ + calibration_data_.rgb_camera_frame_;
+          
+          rgb_rect_frame_cv=cv_ptr_raw_rgb.toImageMsg()
+          rgb_rect_frame_cv->header.stamp=rgb_raw_frame->header.stamp;
+          rgb_rect_frame_cv->header.frame_id=rgb_raw_frame->header.frame_id
+
+
           rgb_raw_publisher_.publish(rgb_raw_frame);
+          rgb_rect_publisher_cv.publish(rgb_rect_frame_cv);
+
 
           // Re-synchronize the header timestamps since we cache the camera calibration message
           rgb_raw_camera_info.header.stamp = capture_time;
+          rgb_rect_camerainfo_cv.header.stamp=capture_time;
+
           rgb_raw_camerainfo_publisher_.publish(rgb_raw_camera_info);
+          rgb_rect_camerainfo_publisher_cv.publish(rgb_rect_camerainfo_cv);
+
+
         }
 
         // We can only rectify the color into the depth co-ordinates if the depth camera is enabled and processing depth

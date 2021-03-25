@@ -109,6 +109,15 @@ class K4AROSDevice
   // When using IMU throttling, computes a mean measurement from a set of IMU samples
   k4a_imu_sample_t computeMeanIMUSample(const std::vector<k4a_imu_sample_t>& samples);
 
+  //Opencv Variables
+  cv::Mat map1_rgb,map2_rgb,map1_depth,map2_depth;
+  cv::Mat new_cam_matrix_rgb,new_cam_matrix_depth;
+
+  // CameraInfo variables
+  CameraInfo rgb_rect_camerainfo_cv;
+  CameraInfo depth_rect_camerainfo_cv;
+  
+
   // ROS Node variables
   ros::NodeHandle node_;
   ros::NodeHandle private_node_;
@@ -116,6 +125,14 @@ class K4AROSDevice
   image_transport::ImageTransport image_transport_;
 
   image_transport::Publisher rgb_raw_publisher_;
+
+  image_transport::Publisher rgb_rect_publisher_cv;
+  image_transport::Publisher depth_rect_publisher_cv;
+  ros::Publisher depth_rect_camerainfo_publisher_cv;
+  ros::Publisher rgb_rect_camerainfo_publisher_cv;
+
+
+
   ros::Publisher rgb_jpeg_publisher_;
   ros::Publisher rgb_raw_camerainfo_publisher_;
 
