@@ -23,6 +23,13 @@
 #include <sensor_msgs/Temperature.h>
 #include <k4a/k4a.hpp>
 #include <k4arecord/playback.hpp>
+#include <cv_bridge/cv_bridge.h>
+
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
+
+
 
 #if defined(K4A_BODY_TRACKING)
 #include <visualization_msgs/MarkerArray.h>
@@ -114,8 +121,9 @@ class K4AROSDevice
   cv::Mat new_cam_matrix_rgb,new_cam_matrix_depth;
 
   // CameraInfo variables
-  CameraInfo rgb_rect_camerainfo_cv;
-  CameraInfo depth_rect_camerainfo_cv;
+  sensor_msgs::CameraInfo rgb_rect_camerainfo_cv;
+  sensor_msgs::CameraInfo depth_rect_camerainfo_cv;
+  sensor_msgs::CameraInfo ir_rect_camerainfo_cv;
 
 
   // ROS Node variables
@@ -130,6 +138,7 @@ class K4AROSDevice
   image_transport::Publisher depth_rect_publisher_cv;
   ros::Publisher depth_rect_camerainfo_publisher_cv;
   ros::Publisher rgb_rect_camerainfo_publisher_cv;
+  ros::Publisher ir_rect_camerainfo_publisher_cv;
 
 
 
@@ -148,8 +157,10 @@ class K4AROSDevice
   ros::Publisher rgb_rect_camerainfo_publisher_;
 
   image_transport::Publisher ir_raw_publisher_;
+  image_transport::Publisher ir_rect_publisher_cv;
+  
   ros::Publisher ir_raw_camerainfo_publisher_;
-  ros::Publisher ir_rect_jpeg_publisher_cv;
+  
 
   ros::Publisher imu_orientation_publisher_;
 
