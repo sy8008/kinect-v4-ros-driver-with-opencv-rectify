@@ -116,7 +116,7 @@ class K4AROSDevice
   // CameraInfo variables
   CameraInfo rgb_rect_camerainfo_cv;
   CameraInfo depth_rect_camerainfo_cv;
-  
+
 
   // ROS Node variables
   ros::NodeHandle node_;
@@ -134,6 +134,8 @@ class K4AROSDevice
 
 
   ros::Publisher rgb_jpeg_publisher_;
+  ros::Publisher rgb_rect_jpeg_publisher_cv;
+
   ros::Publisher rgb_raw_camerainfo_publisher_;
 
   image_transport::Publisher depth_raw_publisher_;
@@ -147,6 +149,7 @@ class K4AROSDevice
 
   image_transport::Publisher ir_raw_publisher_;
   ros::Publisher ir_raw_camerainfo_publisher_;
+  ros::Publisher ir_rect_jpeg_publisher_cv;
 
   ros::Publisher imu_orientation_publisher_;
 

@@ -263,6 +263,9 @@ K4AROSDevice::K4AROSDevice(const NodeHandle& n, const NodeHandle& p)
     // This technique is described in:
     // http://wiki.ros.org/compressed_image_transport#Publishing_compressed_images_directly
     rgb_jpeg_publisher_ = node_.advertise<CompressedImage>(node_.resolveName("rgb/image_raw") + "/compressed", 1);
+    rgb_rect_jpeg_publisher_cv= node_.advertise<CompressedImage>(node_.resolveName("rgb/image_rect_cv") + "/compressed", 1);
+    ir_rect_jpeg_publisher_cv=  node_.advertise<CompressedImage>(node_.resolveName("ir/image_rect_cv") + "/compressed", 1);
+
   }
   else if (params_.color_format == "bgra")
   {
@@ -924,6 +927,8 @@ void K4AROSDevice::framePublisherThread()
     }
 
     CompressedImagePtr rgb_jpeg_frame(new CompressedImage);
+    CompressedImagePtr rgb_rect_jpeg_frame_cv(new CompressedImage);
+
     ImagePtr rgb_raw_frame(new Image);
     ImagePtr rgb_rect_frame_cv(new Image);
 
@@ -934,6 +939,11 @@ void K4AROSDevice::framePublisherThread()
 
 
     ImagePtr ir_raw_frame(new Image);
+    ImagePtr ir_rect_frame_cv(new Image);
+    CompressedImagePtr ir_rect_jpeg_frame_cv(new CompressedImage);
+
+
+
     PointCloud2Ptr point_cloud(new PointCloud2);
 
     if (params_.depth_enabled)
@@ -1011,6 +1021,8 @@ void K4AROSDevice::framePublisherThread()
             depth_rect_frame_cv->header.frame_id=depth_raw_frame->header.frame_id;
 
 
+
+
             // Re-synchronize the header timestamps since we cache the camera calibration message
 
             depth_raw_publisher_.publish(depth_raw_frame);
@@ -1019,7 +1031,7 @@ void K4AROSDevice::framePublisherThread()
 
             depth_raw_camerainfo_publisher_.publish(depth_raw_camera_info);
             depth_rect_camerainfo_publisher_cv.publish(depth_rect_camerainfo_cv);
-            
+
 
 
           }
@@ -1139,6 +1151,19 @@ void K4AROSDevice::framePublisherThread()
         {
           result = getJpegRgbFrame(capture, rgb_jpeg_frame);
 
+          cv_bridge::CvImagePtr cv_ptr_raw_rgb;
+          cv_ptr_raw_rgb = cv_bridge::toCvCopy(rgb_jpeg_frame, sensor_msgs::image_encodings::BGRA8);
+          cv::Mat distort_img_rgb=cv_ptr_raw_rgb->image.clone();
+          cv::Mat undistort_img_rgb;
+          cv::remap(distort_img_rgb,undistort_img_rgb,map1_rgb,map2_rgb,cv::INTER_LINEAR);
+          cv_ptr_raw_rgb->image=undistort_img_rgb;
+
+          rgb_rect_jpeg_frame_cv=cv_ptr_raw_rgb.toCompressedImageMsg(JPEG);
+
+
+          
+
+
           if (result != K4A_RESULT_SUCCEEDED)
           {
             ROS_ERROR_STREAM("Failed to get Jpeg frame");
@@ -1151,7 +1176,12 @@ void K4AROSDevice::framePublisherThread()
 
           rgb_jpeg_frame->header.stamp = capture_time;
           rgb_jpeg_frame->header.frame_id = calibration_data_.tf_prefix_ + calibration_data_.rgb_camera_frame_;
+
+          rgb_rect_jpeg_frame_cv->header.stamp=rgb_jpeg_frame->header.stamp;
+          rgb_rect_jpeg_frame_cv->header.frame_id=rgb_jpeg_frame->header.frame_id;
+          
           rgb_jpeg_publisher_.publish(rgb_jpeg_frame);
+          rgb_rect_jpeg_publisher_cv.publish(rgb_rect_jpeg_frame_cv);
 
           // Re-synchronize the header timestamps since we cache the camera calibration message
           rgb_raw_camera_info.header.stamp = capture_time;
@@ -1170,7 +1200,7 @@ void K4AROSDevice::framePublisherThread()
           cv::Mat distort_img_rgb=cv_ptr_raw_rgb->image.clone();
           cv::Mat undistort_img_rgb;
           cv::remap(distort_img_rgb,undistort_img_rgb,map1_rgb,map2_rgb,cv::INTER_LINEAR);
-          
+          cv_ptr_raw_rgb->image=undistort_img_rgb;
 
 
 
@@ -1188,13 +1218,21 @@ void K4AROSDevice::framePublisherThread()
           rgb_raw_frame->header.stamp = capture_time;
           rgb_raw_frame->header.frame_id = calibration_data_.tf_prefix_ + calibration_data_.rgb_camera_frame_;
           
-          rgb_rect_frame_cv=cv_ptr_raw_rgb.toImageMsg()
+          rgb_rect_frame_cv=cv_ptr_raw_rgb.toImageMsg();
+          // enum Format dst_format=JPEG;
+
+          // rgb_rect_jpeg_frame_cv=cv_ptr_raw_rgb.toCompressedImageMsg(JPEG);
+
           rgb_rect_frame_cv->header.stamp=rgb_raw_frame->header.stamp;
-          rgb_rect_frame_cv->header.frame_id=rgb_raw_frame->header.frame_id
+          rgb_rect_frame_cv->header.frame_id=rgb_raw_frame->header.frame_id;
+
+          // rgb_rect_jpeg_frame_cv->header.stamp=rgb_raw_frame->header.stamp;
+          // rgb_rect_jpeg_frame_cv->header.frame_id=rgb_raw_frame->header.frame_id;
 
 
           rgb_raw_publisher_.publish(rgb_raw_frame);
           rgb_rect_publisher_cv.publish(rgb_rect_frame_cv);
+          // rgb_rect_jpeg_publisher_cv.publish(rgb_rect_jpeg_frame_cv);
 
 
           // Re-synchronize the header timestamps since we cache the camera calibration message
@@ -1233,6 +1271,10 @@ void K4AROSDevice::framePublisherThread()
           // Re-synchronize the header timestamps since we cache the camera calibration message
           rgb_rect_camera_info.header.stamp = capture_time;
           rgb_rect_camerainfo_publisher_.publish(rgb_rect_camera_info);
+
+
+          
+
         }
       }
     }
